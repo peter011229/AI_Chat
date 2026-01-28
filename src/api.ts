@@ -1,11 +1,15 @@
 import type { Message } from './types';
 
-const API_KEY = import.meta.env.VITE_ZHIPU_AI_API_KEY;
 const BASE_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
 export async function* fetchChatCompletionStream(messages: Message[]) {
-    if (!API_KEY || API_KEY === 'your_api_key_here') {
-        throw new Error('请在 .env 文件中配置有效的 VITE_ZHIPU_AI_API_KEY');
+    // 优先从环境变量读取，如果不存在则从 localStorage 读取
+    const envKey = import.meta.env.VITE_ZHIPU_AI_API_KEY;
+    const localKey = localStorage.getItem('custom_api_key');
+    const finalKey = (envKey && envKey !== 'your_api_key_here') ? envKey : localKey;
+
+    if (!finalKey) {
+        throw new Error('未检测到有效的 API Key。请点击左下角设置图标进行配置。');
     }
 
     // 智谱 AI API 要求的格式
@@ -18,7 +22,7 @@ export async function* fetchChatCompletionStream(messages: Message[]) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${API_KEY}`,
+            'Authorization': `Bearer ${finalKey}`,
         },
         body: JSON.stringify({
             model: 'glm-4', // 使用标准模型，可根据需要调整
@@ -46,9 +50,8 @@ export async function* fetchChatCompletionStream(messages: Message[]) {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // 智谱流式响应以 "data: " 开头，每行一个 JSON
         const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 最后一个可能是不完整的行
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
             const trimmedLine = line.trim();

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Trash2, PlusCircle, MessageSquare, User, Menu, X } from 'lucide-react';
+import { Send, Trash2, PlusCircle, MessageSquare, User, Menu, X, Settings } from 'lucide-react';
 import type { Message, ChatSession } from '../types';
 import { fetchChatCompletionStream } from '../api';
 import MessageItem from './MessageItem';
@@ -38,8 +38,10 @@ const ChatInterface: React.FC = () => {
         const savedActive = localStorage.getItem('active_session_id');
         const savedSessions = localStorage.getItem('chat_sessions');
         if (savedActive && savedSessions) {
-            const parsed = JSON.parse(savedSessions) as ChatSession[];
-            if (parsed.some(s => s.id === savedActive)) return savedActive;
+            try {
+                const parsed = JSON.parse(savedSessions) as ChatSession[];
+                if (parsed.some(s => s.id === savedActive)) return savedActive;
+            } catch (e) { }
         }
         return sessions.length > 0 ? sessions[0].id : '';
     });
@@ -47,6 +49,8 @@ const ChatInterface: React.FC = () => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [showKeySettings, setShowKeySettings] = useState(false);
+    const [customKey, setCustomKey] = useState(() => localStorage.getItem('custom_api_key') || '');
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
@@ -94,6 +98,12 @@ const ChatInterface: React.FC = () => {
         if (activeSessionId === id && filtered.length > 0) {
             setActiveSessionId(filtered[0].id);
         }
+    };
+
+    const saveKey = () => {
+        localStorage.setItem('custom_api_key', customKey);
+        setShowKeySettings(false);
+        alert('API Key 已保存在本地浏览器！');
     };
 
     const handleSend = async () => {
@@ -149,8 +159,8 @@ const ChatInterface: React.FC = () => {
         } catch (error: any) {
             console.error('AI 响应错误:', error);
             const errorMessage = error.message?.includes('API key')
-                ? '无效的 API Key，请检查 .env 文件配置'
-                : (error.message || '网络连接超时或 API 调用受限，请稍后重试');
+                ? '无效的 API Key，请点击左下角设置图标配置。'
+                : (error.message || '网络错误，请稍后重试');
 
             setSessions(prev => prev.map(s =>
                 s.id === activeSessionId
@@ -218,7 +228,45 @@ const ChatInterface: React.FC = () => {
                     ))}
                 </div>
 
-                <div className="p-4 border-t border-gray-200 bg-[#edeff2]">
+                <div className="p-4 border-t border-gray-200 bg-[#edeff2] space-y-3">
+                    <button
+                        onClick={() => setShowKeySettings(true)}
+                        className="w-full flex items-center gap-3 px-2 py-1.5 hover:bg-gray-200 rounded-md transition-colors text-gray-600 hover:text-gray-900"
+                    >
+                        <Settings size={18} />
+                        <span className="text-sm font-medium">配置 API Key</span>
+                    </button>
+                    {showKeySettings && (
+                        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                            <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl border border-gray-100">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4">设置 API Key</h3>
+                                <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                                    此 Key 将仅存储在您的浏览器本地 `localStorage` 中，不会上传到任何服务器。
+                                </p>
+                                <input
+                                    type="password"
+                                    value={customKey}
+                                    onChange={(e) => setCustomKey(e.target.value)}
+                                    placeholder="智谱 AI API Key (sk-...)"
+                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 text-sm"
+                                />
+                                <div className="flex gap-3 mt-2">
+                                    <button
+                                        onClick={() => setShowKeySettings(false)}
+                                        className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        取消
+                                    </button>
+                                    <button
+                                        onClick={saveKey}
+                                        className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-md shadow-blue-100"
+                                    >
+                                        保存
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className="flex items-center gap-3 px-2">
                         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs">
                             <User size={16} />
