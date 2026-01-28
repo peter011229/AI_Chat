@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Trash2, PlusCircle, MessageSquare, User, Menu, X, Settings } from 'lucide-react';
+import { Send, Trash2, PlusCircle, MessageSquare, User, Menu, X, Settings, Info } from 'lucide-react';
 import type { Message, ChatSession } from '../types';
 import { fetchChatCompletionStream } from '../api';
 import MessageItem from './MessageItem';
@@ -49,10 +49,14 @@ const ChatInterface: React.FC = () => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+    // 设置相关状态
     const [showKeySettings, setShowKeySettings] = useState(false);
     const [customKey, setCustomKey] = useState(() => localStorage.getItem('custom_api_key') || '');
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [customBaseUrl, setCustomBaseUrl] = useState(() => localStorage.getItem('custom_base_url') || '');
+    const [customModel, setCustomModel] = useState(() => localStorage.getItem('custom_model') || '');
 
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
 
     // 自动滚动
@@ -66,14 +70,13 @@ const ChatInterface: React.FC = () => {
         localStorage.setItem('active_session_id', activeSessionId);
     }, [sessions, activeSessionId]);
 
-    // 确保 activeSessionId 始终指向一个存在的会话
+    // 确定当前 activeSessionId
     useEffect(() => {
         if (!sessions.some(s => s.id === activeSessionId) && sessions.length > 0) {
             setActiveSessionId(sessions[0].id);
         }
     }, [sessions, activeSessionId]);
 
-    // 新建对话
     const createNewChat = () => {
         const newSession: ChatSession = {
             id: Date.now().toString(),
@@ -86,7 +89,6 @@ const ChatInterface: React.FC = () => {
         if (window.innerWidth < 768) setIsSidebarOpen(false);
     };
 
-    // 删除会话
     const deleteSession = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (sessions.length === 1 && sessions[0].id === id) {
@@ -100,10 +102,12 @@ const ChatInterface: React.FC = () => {
         }
     };
 
-    const saveKey = () => {
+    const saveSettings = () => {
         localStorage.setItem('custom_api_key', customKey);
+        localStorage.setItem('custom_base_url', customBaseUrl);
+        localStorage.setItem('custom_model', customModel);
         setShowKeySettings(false);
-        alert('API Key 已保存在本地浏览器！');
+        alert('配置已成功应用！说明：如果不填写，将默认使用智谱 AI 接口。');
     };
 
     const handleSend = async () => {
@@ -159,8 +163,8 @@ const ChatInterface: React.FC = () => {
         } catch (error: any) {
             console.error('AI 响应错误:', error);
             const errorMessage = error.message?.includes('API key')
-                ? '无效的 API Key，请点击左下角设置图标配置。'
-                : (error.message || '网络错误，请稍后重试');
+                ? '未检测到有效的 API Key。请点击左下角设置图标进行配置。'
+                : (error.message || '服务异常，请检查接口配置是否正确');
 
             setSessions(prev => prev.map(s =>
                 s.id === activeSessionId
@@ -168,7 +172,7 @@ const ChatInterface: React.FC = () => {
                         ...s,
                         messages: s.messages.map(m =>
                             m.id === assistantMessageId
-                                ? { ...m, content: `❌ 服务异常: ${errorMessage}` }
+                                ? { ...m, content: `❌ 错误: ${errorMessage}` }
                                 : m
                         )
                     }
@@ -234,39 +238,78 @@ const ChatInterface: React.FC = () => {
                         className="w-full flex items-center gap-3 px-2 py-1.5 hover:bg-gray-200 rounded-md transition-colors text-gray-600 hover:text-gray-900"
                     >
                         <Settings size={18} />
-                        <span className="text-sm font-medium">配置 API Key</span>
+                        <span className="text-sm font-medium">模型服务配置</span>
                     </button>
+
                     {showKeySettings && (
-                        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl border border-gray-100">
-                                <h3 className="text-lg font-bold text-gray-800 mb-4">设置 API Key</h3>
-                                <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                                    此 Key 将仅存储在您的浏览器本地 `localStorage` 中，不会上传到任何服务器。
-                                </p>
-                                <input
-                                    type="password"
-                                    value={customKey}
-                                    onChange={(e) => setCustomKey(e.target.value)}
-                                    placeholder="智谱 AI API Key (sk-...)"
-                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 text-sm"
-                                />
-                                <div className="flex gap-3 mt-2">
+                        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-600"></div>
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-xl font-bold text-gray-800">万能模型配置</h3>
+                                    <button onClick={() => setShowKeySettings(false)} className="text-gray-400 hover:text-gray-600">
+                                        <X size={20} />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-5">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">API Key</label>
+                                        <input
+                                            type="password"
+                                            value={customKey}
+                                            onChange={(e) => setCustomKey(e.target.value)}
+                                            placeholder="厂商的 API Key (sk-...)"
+                                            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">接口地址 (Base URL)</label>
+                                        <input
+                                            type="text"
+                                            value={customBaseUrl}
+                                            onChange={(e) => setCustomBaseUrl(e.target.value)}
+                                            placeholder="为空则使用智谱默认接口"
+                                            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">模型标识 (Model)</label>
+                                        <input
+                                            type="text"
+                                            value={customModel}
+                                            onChange={(e) => setCustomModel(e.target.value)}
+                                            placeholder="例如: glm-4, deepseek-chat"
+                                            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                        />
+                                    </div>
+
+                                    <div className="bg-blue-50/50 p-3 rounded-lg flex items-start gap-3 mt-4">
+                                        <Info size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                                        <p className="text-[11px] text-blue-800 leading-relaxed">
+                                            配置完成后将保存在本地浏览器中，支持所有兼容 <strong>OpenAI 协议</strong> 的大模型厂商（如 DeepSeek, Moonshot 等）。
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-8">
                                     <button
                                         onClick={() => setShowKeySettings(false)}
-                                        className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                        className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
                                     >
                                         取消
                                     </button>
                                     <button
-                                        onClick={saveKey}
-                                        className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-md shadow-blue-100"
+                                        onClick={saveSettings}
+                                        className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-lg shadow-blue-200"
                                     >
-                                        保存
+                                        保存配置
                                     </button>
                                 </div>
                             </div>
                         </div>
                     )}
+
                     <div className="flex items-center gap-3 px-2">
                         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs">
                             <User size={16} />

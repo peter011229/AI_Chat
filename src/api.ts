@@ -1,6 +1,8 @@
 import type { Message } from './types';
 
-const BASE_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+// 默认值 - 智谱 AI
+const DEFAULT_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+const DEFAULT_MODEL = 'glm-4';
 
 export async function* fetchChatCompletionStream(messages: Message[]) {
     // 优先从环境变量读取，如果不存在则从 localStorage 读取
@@ -8,24 +10,28 @@ export async function* fetchChatCompletionStream(messages: Message[]) {
     const localKey = localStorage.getItem('custom_api_key');
     const finalKey = (envKey && envKey !== 'your_api_key_here') ? envKey : localKey;
 
+    // 读取动态配置，如果没有则使用默认值
+    const finalBaseUrl = localStorage.getItem('custom_base_url') || DEFAULT_BASE_URL;
+    const finalModel = localStorage.getItem('custom_model') || DEFAULT_MODEL;
+
     if (!finalKey) {
         throw new Error('未检测到有效的 API Key。请点击左下角设置图标进行配置。');
     }
 
-    // 智谱 AI API 要求的格式
+    // 格式化消息
     const formattedMessages = messages.map(({ role, content }) => ({
         role,
         content,
     }));
 
-    const response = await fetch(BASE_URL, {
+    const response = await fetch(finalBaseUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${finalKey}`,
         },
         body: JSON.stringify({
-            model: 'glm-4', // 使用标准模型，可根据需要调整
+            model: finalModel,
             messages: formattedMessages,
             stream: true,
         }),
